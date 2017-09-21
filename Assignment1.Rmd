@@ -1,0 +1,103 @@
+---
+title: "Analysis of Personal Activity"
+author: "Jiang Bian"
+date: "September 10, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyr)
+```
+
+## Load data from the web
+
+Load the data of the activity monitoring devices from the web (https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip). This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
+```{r load}
+df <- read.csv("activity.csv") %>% tbl_df() 
+summary(df)
+```
+
+## Basic Analysis
+
+1.Calculate the total number of steps taken per day
+```{r total_steps}
+r1 <-group_by(df,date) %>% summarise(sum = sum(steps, na.rm = TRUE))
+print(data.frame(r1))
+```
+
+2.Make a histogram of the total number of steps taken each day
+```{r hist_totalsteps, echo=FALSE}
+hist(r1$sum,main ="Total number of Steps per Day", xlab = "Total Numbers of Steps per Day", ylab = "Frequency")
+```
+
+3.Calculate the mean and median of the total number of steps taken per day
+```{r mm_steps}
+r3 <-group_by(df,date) %>% summarise(mean = mean(steps, na.rm = TRUE), median = median(steps, na.rm = TRUE))
+print(data.frame(r3))
+```
+
+#Analysis of Daily Activity Pattern
+
+4.Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+```{r ts_avg_steps_per_interval}
+r4 <-group_by(df,interval) %>% summarise(avgsteps = mean(steps, na.rm = TRUE))
+plot(r4, type = "l", main ="Average number of Steps per Interval", xlab = "Intervals", ylab = "Average Steps")
+```
+
+5.Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+```{r max_steps_per_interval}
+data.frame(r4[which.max(r4$avgsteps),])
+```
+
+##Imputing missing values
+6.Calculate the total number of missing values in the dataset
+```{r total_missing}
+nrow(r4[is.na(df$steps),])
+```
+
+7.Imput missing values in the dataset by using the mean of the corresponding interval
+```{r imput_missing}
+r7 <-group_by(df,interval) 
+r7 <- merge(r7,r4,all.x = TRUE) %>% 
+  mutate(avgstepsInt = round(avgsteps,0), steps = ifelse(is.na(steps),avgstepsInt,steps)) %>% 
+  select(steps,date,interval)
+summary(r7)
+```
+
+8.Make a histogram of the total number of steps taken each day.
+```{r hist_totalsteps2}
+r1 <-group_by(df,date) %>% summarise(sum = sum(steps, na.rm = TRUE))
+r8 <-group_by(r7,date) %>% summarise(sum = sum(steps, na.rm = TRUE))
+par( mfrow = c( 1, 2))
+hist(r8$sum,main ="Sum of Steps per Day W/O NA", xlab = "Total Numbers of Steps per Day", ylab = "Frequency")
+hist(r1$sum,main ="Sum of Steps per Day W/NA", xlab = "Total Numbers of Steps per Day", ylab = "Frequency")
+
+```
+
+9.Calculate the mean and median total number of steps taken per day
+```{r mm_totalsteps2}
+r91 <-c(mean(r8$sum, na.rm = TRUE),mean(r1$sum,na.rm = TRUE))
+r92 <-c(median(r8$sum, na.rm = TRUE),median(r1$sum,na.rm = TRUE))
+r9 <- data.frame(rbind(r91,r92))
+row.names(r9) <-c("Mean","Median")
+colnames(r9)  <-c("Without NA","With NA")
+print(r9)
+```
+
+##Are there differences in activity patterns between weekdays and weekends?
+
+10. Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.Then make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).
+```{r weekends}
+library(lattice)
+r10 <- transform(r7, date = as.Date(date)) %>% 
+  mutate(IsWeekend = as.factor(ifelse(weekdays(date) %in% c("Saturday", "Sunday"),1,0))) %>%
+  group_by(IsWeekend,interval) %>% summarise(mean = mean(steps, na.rm=TRUE))
+
+xyplot(mean~interval|IsWeekend,r10,type="l", layout = c(1,2), 
+      strip = strip.custom(factor.levels=c("Weekdays","Weekends")),
+      main="Average Steps per Intervals", 
+      xlab="Interval", 
+      ylab="Average Step")
+```
